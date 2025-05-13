@@ -1,8 +1,8 @@
 // src/components/Dashboard.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import type { CustomerData, FilterStatus } from '../types'; // Import types
-// Import the service functions, including the new clearAllCustomerData
-import { fetchLiveCustomerData, updateQueryStatus, clearAllCustomerData } from '../services/customerService';
+// Import the service functions, including updateQueryStatus and the new deleteCustomer
+import { fetchLiveCustomerData, updateQueryStatus, deleteCustomer } from '../services/customerService';
 
 // Simple Modal Component (Can be extracted to its own file later)
 interface DetailsModalProps {
@@ -10,7 +10,9 @@ interface DetailsModalProps {
     onClose: () => void;
     onMarkAsReplied: (id: string) => void; // Pass handler down
     onEmailCustomer: (email: string) => void; // Pass handler down
+    onDeleteCustomer: (id: string) => void; // <--- Pass delete handler down
     isUpdating: boolean; // Pass updating state down
+    isDeleting: boolean; // <--- Pass deleting state down
 }
 
 const DetailsModal: React.FC<DetailsModalProps> = ({
@@ -18,7 +20,9 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
     onClose,
     onMarkAsReplied,
     onEmailCustomer,
-    isUpdating
+    onDeleteCustomer, // <--- Destructure delete handler
+    isUpdating,
+    isDeleting // <--- Destructure deleting state
 }) => {
     // Prevent propagation for the modal content itself
     const handleModalContentClick = (e: React.MouseEvent) => {
@@ -79,7 +83,7 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
                                 onMarkAsReplied(customer.id); // Use the passed handler
                             }}
                             className={`bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition duration-200 ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            disabled={isUpdating} // Disable while updating
+                            disabled={isUpdating || isDeleting} // Disable while updating or deleting
                         >
                             {isUpdating ? (
                                 <span className="flex items-center justify-center">
@@ -94,14 +98,32 @@ const DetailsModal: React.FC<DetailsModalProps> = ({
                               e.stopPropagation(); // Stop propagation for button in modal
                              onEmailCustomer(customer.email); // Use the passed handler
                          }}
-                         className={`bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus="ring-blue-500 focus:ring-opacity-50 transition duration-200 ${isUpdating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          disabled={isUpdating}
+                         className={`bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus="ring-blue-500 focus:ring-opacity-50 transition duration-200 ${isUpdating || isDeleting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          disabled={isUpdating || isDeleting} // Disable while updating or deleting
                      >
                        Email Customer
                      </button>
+                     {/* <--- NEW: Delete Button in Modal ---> */}
+                     <button
+                         onClick={(e) => {
+                             e.stopPropagation(); // Stop propagation for button in modal
+                             onDeleteCustomer(customer.id); // Use the passed handler
+                         }}
+                         className={`bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-200 ${isDeleting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                         disabled={isDeleting || isUpdating} // Disable while deleting or updating
+                     >
+                        {isDeleting ? (
+                            <span className="flex items-center">
+                                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                Deleting...
+                            </span>
+                         ) : 'Delete'}
+                     </button>
+                     {/* <--- END NEW ---> */}
                     <button
                         onClick={onClose}
                         className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-opacity-50 transition duration-200"
+                        disabled={isDeleting || isUpdating} // Disable while deleting or updating
                     >
                         Close
                     </button>
@@ -118,8 +140,9 @@ const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterStatus>('all'); // Use FilterStatus type
   const [updatingId, setUpdatingId] = useState<string | null>(null); // Track which query is being updated
+  const [deletingId, setDeletingId] = useState<string | null>(null); // <--- New state for tracking deletion
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null); // State to track selected card for modal
-  const [clearingData, setClearingData] = useState(false); // <--- New state for clearing data
+
 
   // Effect to fetch and update data
   useEffect(() => {
@@ -189,7 +212,7 @@ const Dashboard: React.FC = () => {
    };
 
 
-  // Function to handle the email button click (used by modal)
+  // Function to handle the email button click (used by modal and card)
   const handleEmailClick = (email: string) => {
     console.log(`Attempting to open email client for: ${email}`);
     // window.location.href = `mailto:${email}`; // Uncomment if you want this to happen directly
@@ -199,8 +222,9 @@ const Dashboard: React.FC = () => {
   const handleMarkAsReplied = async (queryId: string) => {
     const customerToUpdate = customers.find(c => c.id === queryId);
 
-    if (!customerToUpdate || customerToUpdate.status === 'replied' || updatingId) {
-       console.log(`Prevented update for ${queryId}. Status: ${customerToUpdate?.status}, updatingId: ${updatingId}`);
+    // Prevent updating if already replied or another update/delete is in progress
+    if (!customerToUpdate || customerToUpdate.status === 'replied' || updatingId || deletingId) {
+       console.log(`Prevented update for ${queryId}. Status: ${customerToUpdate?.status}, updatingId: ${updatingId}, deletingId: ${deletingId}`);
        return;
     }
 
@@ -216,8 +240,10 @@ const Dashboard: React.FC = () => {
           )
         );
         console.log(`Query ${queryId} marked as replied locally.`);
-        // Close the modal after successful update
-        handleCloseModal();
+        // Close the modal after successful update if it was open
+        if (selectedCustomerId === queryId) {
+             handleCloseModal();
+        }
 
       } else {
          alert(`Failed to mark query ${queryId} as replied.`);
@@ -230,26 +256,41 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // <--- NEW: Function to handle clearing all data ---
-  const handleClearData = async () => {
+  // <--- NEW: Function to handle deleting a single customer ---
+  const handleDeleteCustomer = async (queryId: string, event?: React.MouseEvent) => {
+      // Stop propagation if event object is provided (from card button)
+      if (event) {
+          event.stopPropagation();
+      }
+
       // Use window.confirm for a simple confirmation dialog
-      const isConfirmed = window.confirm("Are you sure you want to clear ALL customer data? This action cannot be undone.");
+      const isConfirmed = window.confirm(`Are you sure you want to delete the query from ${customers.find(c => c.id === queryId)?.name || 'this customer'}? This action cannot be undone.`);
 
       if (isConfirmed) {
-          setClearingData(true); // Indicate that clearing is in progress
+          setDeletingId(queryId); // Indicate which query is being deleted
           try {
-              await clearAllCustomerData(); // Call the service function
-              setCustomers([]); // Clear local state
-              setSelectedCustomerId(null); // Close the modal if open
-              console.log("Customer data cleared successfully.");
-          } catch (err) {
-              console.error("Error clearing customer data:", err);
-              alert("Failed to clear customer data."); // Provide feedback on failure
+              const success = await deleteCustomer(queryId); // Call the service function
+
+              if (success) {
+                 // Update local state by filtering out the deleted customer
+                 setCustomers(prevCustomers => prevCustomers.filter(customer => customer.id !== queryId));
+                 console.log(`Query ${queryId} deleted successfully.`);
+                 // Close the modal if the deleted card was the one currently open
+                 if (selectedCustomerId === queryId) {
+                     handleCloseModal();
+                 }
+              } else {
+                 // Handle service reporting failure (though deleteCustomer rejects on failure)
+                 alert(`Failed to delete query ${queryId}.`);
+              }
+          } catch (err: any) {
+              console.error(`Error deleting query ${queryId}:`, err);
+              alert(`An error occurred while deleting query ${queryId}: ${err.message}`); // Provide feedback on failure
           } finally {
-              setClearingData(false); // Reset clearing state
+              setDeletingId(null); // Reset deleting state
           }
       } else {
-          console.log("Data clearing cancelled.");
+          console.log(`Deletion of query ${queryId} cancelled.`);
       }
   };
   // <--- END NEW ---
@@ -260,14 +301,14 @@ const Dashboard: React.FC = () => {
   const repliedCount = customers.filter(c => c.status === 'replied').length;
 
   return (
-    <div className="p-6 bg-gray-100 min-h-screen">
+    <div className="p-6 bg-gray-100 min-h-screen relative">
       {/* Dashboard Header */}
       <div className="mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between">
         <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4 sm:mb-0">
           Client Query Requests
         </h1>
-        {/* Filter Buttons / Status Counts / Clear Data Button */}
-        <div className="flex flex-wrap items-center gap-3"> {/* Added items-center */}
+        {/* Filter Buttons / Status Counts */}
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => setFilter('all')}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-blue-700 border border-blue-300 hover:bg-blue-50'}`}
@@ -286,11 +327,6 @@ const Dashboard: React.FC = () => {
           >
             Replied ({repliedCount})
           </button>
-
-          {/* <--- NEW: Clear Data Button ---> */}
-          
-           {/* <--- END NEW ---> */}
-
         </div>
       </div>
 
@@ -326,14 +362,31 @@ const Dashboard: React.FC = () => {
       {filteredCustomers.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredCustomers.map((customer) => (
-             // Card styling without inline expansion details
+             // Card styling
             <div
               key={customer.id}
               className={`bg-white rounded-lg shadow-md p-6 flex flex-col justify-between
                          border-t-4 ${customer.status === 'pending' ? 'border-yellow-500' : 'border-green-500'}
-                         cursor-pointer select-none transition-shadow duration-200 ease-in-out hover:shadow-lg`}
+                         cursor-pointer select-none transition-shadow duration-200 ease-in-out hover:shadow-lg relative`}
                onClick={() => handleCardClick(customer.id)} // Trigger modal open on card click
             >
+              {/* <--- NEW: Delete Button on Card ---> */}
+              <button
+                  className={`absolute top-2 right-2 text-gray-400 hover:text-red-600 transition-colors duration-200 ${deletingId === customer.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  onClick={(e) => handleDeleteCustomer(customer.id, e)} // Pass event to stop propagation
+                  disabled={deletingId === customer.id || updatingId === customer.id} // Disable while deleting or updating
+                  title="Delete Query"
+              >
+                  {deletingId === customer.id ? (
+                       <svg className="animate-spin h-5 w-5 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                  ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                         <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 011 1v6a1 1 0 11-2 0V9a1 1 0 011-1zm7 0a1 1 0 011 1v6a1 1 0 11-2 0V9a1 1 0 011-1z" clipRule="evenodd" />
+                      </svg>
+                  )}
+              </button>
+              {/* <--- END NEW ---> */}
+
               <div>
                  {/* Status Badge */}
                  <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full mb-2 ${
@@ -367,7 +420,7 @@ const Dashboard: React.FC = () => {
                              handleEmailClick(customer.email);
                        }}
                        className={`bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-md focus:outline-none focus:ring-2 focus="ring-blue-500 focus:ring-opacity-50 transition duration-200 ${updatingId === customer.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        disabled={updatingId === customer.id}
+                        disabled={updatingId === customer.id || deletingId === customer.id} // Disable while updating or deleting
                      >
                        Email Customer
                      </button>
@@ -385,23 +438,13 @@ const Dashboard: React.FC = () => {
                 onClose={handleCloseModal}
                 onMarkAsReplied={handleMarkAsReplied}
                 onEmailCustomer={handleEmailClick}
+                onDeleteCustomer={handleDeleteCustomer} // <--- Pass delete handler to modal
                 isUpdating={updatingId === selectedCustomer.id}
+                isDeleting={deletingId === selectedCustomer.id} // <--- Pass deleting state to modal
             />
         )}
 
-
-        <button
-           onClick={handleClearData}
-           className={`fixed bottom-6 right-6 px-6 py-3 rounded-full text-sm font-medium bg-red-600 text-white shadow-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-200 ease-in-out z-40 flex items-center justify-center ${clearingData ? 'opacity-50 cursor-not-allowed' : ''}`}
-           disabled={clearingData} // Disable button while clearing
-        >
-           {clearingData ? (
-              <span className="flex items-center">
-                 <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                 Clearing...
-              </span>
-           ) : 'Clear All Data'}
-        </button>
+       {/* --- Removed Clear Data Button from here --- */}
 
     </div>
   );

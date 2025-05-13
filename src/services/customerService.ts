@@ -13,6 +13,8 @@ const loadDataFromStorage = (): CustomerData[] => {
       // Basic check to ensure loaded data has the 'message' field
       if (parsedData.length > 0 && !parsedData[0]?.message) {
            console.warn("Loaded data from localStorage is missing 'message' field, regenerating mock data.");
+           // Clear old data before regenerating
+           localStorage.removeItem(LOCAL_STORAGE_KEY);
            return generateInitialMockData(); // Regenerate if structure is old
       }
       return parsedData;
@@ -20,7 +22,7 @@ const loadDataFromStorage = (): CustomerData[] => {
   } catch (error) {
     console.error("Failed to load data from localStorage:", error);
     // If loading fails, clear storage to prevent persistent errors
-    clearAllCustomerData();
+    clearAllCustomerData(); // Use the existing clear function
   }
   return []; // Return empty array if no data or error
 };
@@ -87,12 +89,13 @@ let currentCustomerData: CustomerData[] = [];
 // Initialize data: try loading from storage, otherwise use mock data
 const initializeData = () => {
     currentCustomerData = loadDataFromStorage();
+    // loadDataFromStorage now handles regeneration if needed
     if (currentCustomerData.length === 0) {
-        console.log("No data in localStorage or data invalid, generating initial mock data.");
-        currentCustomerData = generateInitialMockData();
-        saveDataToStorage(currentCustomerData);
+         console.log("Data is still empty after load attempt, generating initial mock data.");
+         currentCustomerData = generateInitialMockData();
+         saveDataToStorage(currentCustomerData);
     } else {
-         console.log("Loaded data from localStorage.");
+         console.log("Data initialized from localStorage.");
     }
 };
 
@@ -158,16 +161,32 @@ export const updateQueryStatus = (queryId: string, status: CustomerData['status'
   });
 };
 
-// --- NEW: Function to clear all data ---
-export const clearAllCustomerData = (): Promise<void> => {
-    console.log("Service: Simulating clearing all customer data...");
-    return new Promise((resolve) => {
+// Function to clear all data (kept for robustness, though not used by a button now)
+export const clearAllCustomerData = (): void => { // Changed to void as it's synchronous now
+    console.log("Service: Clearing all customer data...");
+    currentCustomerData = []; // Clear the internal state
+    localStorage.removeItem(LOCAL_STORAGE_KEY); // Remove from localStorage
+    console.log("Service: All customer data cleared.");
+};
+
+// --- NEW: Function to delete a single customer ---
+export const deleteCustomer = (queryId: string): Promise<boolean> => {
+    console.log(`Service: Simulating deleting query ${queryId}...`);
+    return new Promise((resolve, reject) => {
         setTimeout(() => {
-            currentCustomerData = []; // Clear the internal state
-            localStorage.removeItem(LOCAL_STORAGE_KEY); // Remove from localStorage
-            console.log("Service: All customer data cleared.");
-            resolve(); // Indicate completion
-        }, 500); // Simulate a small delay
+            const initialLength = currentCustomerData.length;
+            // Filter out the customer to be deleted
+            currentCustomerData = currentCustomerData.filter(customer => customer.id !== queryId);
+
+            if (currentCustomerData.length < initialLength) {
+                saveDataToStorage(currentCustomerData); // Save the updated state
+                console.log(`Service: Simulated delete successful for ${queryId}.`);
+                resolve(true); // Indicate success
+            } else {
+                 console.error(`Service: Query ${queryId} not found for deletion.`);
+                 reject(new Error(`Service: Query ${queryId} not found.`));
+            }
+        }, 300 + Math.random() * 500); // Simulate delay
     });
 };
 // --- END NEW ---
