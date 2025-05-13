@@ -9,10 +9,18 @@ const loadDataFromStorage = (): CustomerData[] => {
     const data = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (data) {
       // Add basic validation if needed
-      return JSON.parse(data) as CustomerData[];
+      const parsedData = JSON.parse(data) as CustomerData[];
+      // Basic check to ensure loaded data has the 'message' field
+      if (parsedData.length > 0 && !parsedData[0]?.message) {
+           console.warn("Loaded data from localStorage is missing 'message' field, regenerating mock data.");
+           return generateInitialMockData(); // Regenerate if structure is old
+      }
+      return parsedData;
     }
   } catch (error) {
     console.error("Failed to load data from localStorage:", error);
+    // If loading fails, clear storage to prevent persistent errors
+    clearAllCustomerData();
   }
   return []; // Return empty array if no data or error
 };
@@ -24,13 +32,15 @@ const saveDataToStorage = (data: CustomerData[]): void => {
   } catch (error) {
     console.error("Failed to save data to localStorage:", error);
     // Handle potential storage limits or errors if necessary
+    alert("Warning: Could not save data to local storage. Your changes might not persist.");
   }
 };
 
 // --- SIMULATED BACKEND DATA & LOGIC (using localStorage for persistence) ---
 
-// Initial mock data function - only used if localStorage is empty
+// Initial mock data function - only used if localStorage is empty or invalid
 const generateInitialMockData = (): CustomerData[] => {
+    console.log("Service: Generating initial mock data...");
     return [
         {
             id: `query-${Date.now()}-abc`,
@@ -39,7 +49,7 @@ const generateInitialMockData = (): CustomerData[] => {
             email: 'alice@example.com',
             topic: 'Regarding my recent order',
             status: Math.random() > 0.3 ? 'pending' : 'replied',
-            message: "Hi, I haven't received my order placed last week. The tracking number is #XYZ789. Can you please check the status? Thanks!", // <--- Added message
+            message: "Hi, I haven't received my order placed last week. The tracking number is #XYZ789. Can you please check the status? Thanks!",
         },
         {
             id: `query-${Date.now()}-def`,
@@ -48,7 +58,7 @@ const generateInitialMockData = (): CustomerData[] => {
             email: 'bob@example.net',
             topic: 'Question about pricing plans',
             status: Math.random() > 0.3 ? 'pending' : 'replied',
-             message: "Hello, I'm interested in your premium plan but need to know if it includes feature X. Your pricing page isn't clear on this. Could you clarify?", // <--- Added message
+             message: "Hello, I'm interested in your premium plan but need to know if it includes feature X. Your pricing page isn't clear on this. Could you clarify?",
         },
         {
             id: `query-${Date.now()}-ghi`,
@@ -57,7 +67,7 @@ const generateInitialMockData = (): CustomerData[] => {
             email: 'charlie@example.org',
             topic: 'Need technical assistance',
             status: Math.random() > 0.3 ? 'pending' : 'replied',
-             message: "My account seems to be locked. I've tried resetting my password but didn't receive the email. My username is 'funnyhat'. Please help!", // <--- Added message
+             message: "My account seems to be locked. I've tried resetting my password but didn't receive the email. My username is 'funnyhat'. Please help!",
         },
         {
             id: `query-${Date.now()}-jkl`,
@@ -66,7 +76,7 @@ const generateInitialMockData = (): CustomerData[] => {
             email: 'diana@example.com',
             topic: 'Feedback on new feature',
             status: Math.random() > 0.3 ? 'pending' : 'replied',
-             message: "Just wanted to say I love the new dark mode feature! It's much easier on the eyes. Great job to the dev team!", // <--- Added message
+             message: "Just wanted to say I love the new dark mode feature! It's much easier on the eyes. Great job to the dev team!",
         },
     ];
 };
@@ -77,13 +87,12 @@ let currentCustomerData: CustomerData[] = [];
 // Initialize data: try loading from storage, otherwise use mock data
 const initializeData = () => {
     currentCustomerData = loadDataFromStorage();
-    // Check if loaded data is empty or if it's old data without the message field (basic check)
-    if (currentCustomerData.length === 0 || !currentCustomerData[0]?.message) {
-        console.log("Initializing/Regenerating data with messages.");
+    if (currentCustomerData.length === 0) {
+        console.log("No data in localStorage or data invalid, generating initial mock data.");
         currentCustomerData = generateInitialMockData();
         saveDataToStorage(currentCustomerData);
     } else {
-         console.log("Loaded data from localStorage including messages.");
+         console.log("Loaded data from localStorage.");
     }
 };
 
@@ -106,7 +115,7 @@ export const fetchLiveCustomerData = (): Promise<CustomerData[]> => {
                 email: `new.customer${Date.now()}@example.xyz`,
                 topic: 'Urgent question ' + Math.random().toFixed(2),
                 status: 'pending', // New queries are always pending
-                message: `This is a simulated urgent message from a new customer (${Math.random().toFixed(4)}). Please attend to this promptly.`, // <--- Added message for new queries
+                message: `This is a simulated urgent message from a new customer (${Math.random().toFixed(4)}). Please attend to this promptly.`,
              };
              currentCustomerData = [newQuery, ...currentCustomerData]; // Add new query
              saveDataToStorage(currentCustomerData); // Save the updated state
@@ -148,5 +157,19 @@ export const updateQueryStatus = (queryId: string, status: CustomerData['status'
     }, 300 + Math.random() * 500);
   });
 };
+
+// --- NEW: Function to clear all data ---
+export const clearAllCustomerData = (): Promise<void> => {
+    console.log("Service: Simulating clearing all customer data...");
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            currentCustomerData = []; // Clear the internal state
+            localStorage.removeItem(LOCAL_STORAGE_KEY); // Remove from localStorage
+            console.log("Service: All customer data cleared.");
+            resolve(); // Indicate completion
+        }, 500); // Simulate a small delay
+    });
+};
+// --- END NEW ---
 
 // --- END OF SIMULATED BACKEND DATA & LOGIC ---
