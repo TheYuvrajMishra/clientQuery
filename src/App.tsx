@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Dashboard from './pages/Dashboard'; // Assuming Dashboard is in a 'pages' directory
 import LoginPage from './pages/LoginPage'; // Assuming LoginPage is in a 'pages' directory
 
