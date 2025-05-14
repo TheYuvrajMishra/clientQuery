@@ -206,7 +206,7 @@ const Dashboard: React.FC = () => {
        setSelectedCustomerId(customerId);
   };
 
-   // Function to handle closing the modal
+
    const handleCloseModal = () => {
        setSelectedCustomerId(null);
    };
